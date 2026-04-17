@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  operator
+}
+
+model Device {
+  id                  Int       @id @default(autoincrement())
+  name                String
+  ip                  String
+  type                String
+  credentialEncrypted String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  healthchecks        HealthcheckResult[]
+}
+
+model HealthcheckResult {
+  id         Int       @id @default(autoincrement())
+  device     Device    @relation(fields: [deviceId], references: [id])
+  deviceId   Int
+  status     String
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+  details    Json?
+  checks     CheckResult[]
+  createdAt  DateTime  @default(now())
+}
+
+model CheckResult {
+  id            Int              @id @default(autoincrement())
+  healthcheck   HealthcheckResult @relation(fields: [healthcheckId], references: [id])
+  healthcheckId Int
+  step          String
+  status        String
+  output        String?
+  responseTime  Int?
+  createdAt     DateTime         @default(now())
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  title       String
+  summary     String
+  format      String
+  generatedAt DateTime @default(now())
+  metadata    Json?
+  createdAt   DateTime @default(now())
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  role      Role     @default(operator)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

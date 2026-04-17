@@ -1,0 +1,18 @@
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { RunHealthcheckDto } from './dto/run-healthcheck.dto';
+import { HealthcheckService } from './healthcheck.service';
+
+@Controller('healthchecks')
+export class HealthcheckController {
+  constructor(private readonly healthcheckService: HealthcheckService) {}
+
+  @Post()
+  run(@Body() payload: RunHealthcheckDto) {
+    return this.healthcheckService.run(payload);
+  }
+
+  @Get(':deviceId')
+  findByDevice(@Param('deviceId') deviceId: string) {
+    return this.healthcheckService.findByDevice(Number(deviceId));
+  }
+}
