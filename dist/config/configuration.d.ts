@@ -3,5 +3,6 @@ declare const _default: () => {
     databaseUrl: string | undefined;
     jwtSecret: string;
     encryptionKey: string;
+    puttyPlinkPath: string;
 };
 export default _default;

@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.HealthcheckController = void 0;
 const common_1 = require("@nestjs/common");
 const run_healthcheck_dto_1 = require("./dto/run-healthcheck.dto");
+const live_connectivity_dto_1 = require("./dto/live-connectivity.dto");
 const healthcheck_service_1 = require("./healthcheck.service");
 let HealthcheckController = class HealthcheckController {
     healthcheckService;
@@ -23,6 +24,15 @@ let HealthcheckController = class HealthcheckController {
     }
     run(payload) {
         return this.healthcheckService.run(payload);
+    }
+    testConnectivity(payload) {
+        return this.healthcheckService.testConnectivity(payload);
+    }
+    runLive(payload) {
+        return this.healthcheckService.runLive(payload);
+    }
+    saveCredential(payload) {
+        return this.healthcheckService.saveCredential(payload);
     }
     findByDevice(deviceId) {
         return this.healthcheckService.findByDevice(Number(deviceId));
@@ -36,6 +46,27 @@ __decorate([
     __metadata("design:paramtypes", [run_healthcheck_dto_1.RunHealthcheckDto]),
     __metadata("design:returntype", void 0)
 ], HealthcheckController.prototype, "run", null);
+__decorate([
+    (0, common_1.Post)('connectivity-test'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [live_connectivity_dto_1.LiveConnectivityDto]),
+    __metadata("design:returntype", void 0)
+], HealthcheckController.prototype, "testConnectivity", null);
+__decorate([
+    (0, common_1.Post)('live-run'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [live_connectivity_dto_1.LiveConnectivityDto]),
+    __metadata("design:returntype", void 0)
+], HealthcheckController.prototype, "runLive", null);
+__decorate([
+    (0, common_1.Post)('device-credential'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [live_connectivity_dto_1.LiveConnectivityDto]),
+    __metadata("design:returntype", void 0)
+], HealthcheckController.prototype, "saveCredential", null);
 __decorate([
     (0, common_1.Get)(':deviceId'),
     __param(0, (0, common_1.Param)('deviceId')),

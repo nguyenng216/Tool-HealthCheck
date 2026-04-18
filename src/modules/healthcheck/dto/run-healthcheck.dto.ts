@@ -17,8 +17,3 @@ export class RunHealthcheckDto {
   @IsEnum(ExecutionMode)
   mode?: ExecutionMode;
 }
-
-  @IsOptional()
-  @IsEnum(ExecutionMode)
-  mode?: ExecutionMode;
-}

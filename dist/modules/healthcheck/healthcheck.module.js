@@ -9,6 +9,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.HealthcheckModule = void 0;
 const common_1 = require("@nestjs/common");
 const ai_module_1 = require("../ai/ai.module");
+const snmp_module_1 = require("../snmp/snmp.module");
+const ssh_module_1 = require("../ssh/ssh.module");
+const telnet_module_1 = require("../telnet/telnet.module");
+const crypto_service_1 = require("../../common/crypto/crypto.service");
 const healthcheck_controller_1 = require("./healthcheck.controller");
 const healthcheck_service_1 = require("./healthcheck.service");
 const healthcheck_engine_1 = require("./healthcheck.engine");
@@ -17,9 +21,9 @@ let HealthcheckModule = class HealthcheckModule {
 exports.HealthcheckModule = HealthcheckModule;
 exports.HealthcheckModule = HealthcheckModule = __decorate([
     (0, common_1.Module)({
-        imports: [ai_module_1.AiModule],
+        imports: [ai_module_1.AiModule, ssh_module_1.SshModule, snmp_module_1.SnmpModule, telnet_module_1.TelnetModule],
         controllers: [healthcheck_controller_1.HealthcheckController],
-        providers: [healthcheck_service_1.HealthcheckService, healthcheck_engine_1.HealthcheckEngine],
+        providers: [healthcheck_service_1.HealthcheckService, healthcheck_engine_1.HealthcheckEngine, crypto_service_1.CryptoService],
         exports: [healthcheck_service_1.HealthcheckService],
     })
 ], HealthcheckModule);

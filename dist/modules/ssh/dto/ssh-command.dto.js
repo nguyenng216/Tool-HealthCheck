@@ -53,6 +53,4 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SshCommandDto.prototype, "adapter", void 0);
-adapter ?  : string;
-commandKey ?  : string;
 //# sourceMappingURL=ssh-command.dto.js.map

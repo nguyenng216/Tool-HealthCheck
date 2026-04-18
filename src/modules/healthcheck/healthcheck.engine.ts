@@ -35,6 +35,9 @@ export class HealthcheckEngine {
   private loadPlugins(): void {
     const pluginDirectory = join(__dirname, 'checks');
     const pluginFiles = readdirSync(pluginDirectory).filter((file) => {
+      if (file.endsWith('.d.ts')) {
+        return false;
+      }
       const extension = extname(file);
       return extension === '.ts' || extension === '.js';
     });
@@ -53,7 +56,8 @@ export class HealthcheckEngine {
         this.plugins.push(plugin);
         this.logger.log(`Loaded healthcheck plugin: ${plugin.name}`);
       } catch (error) {
-        this.logger.error(`Failed to load plugin ${file}: ${error.message}`);
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Failed to load plugin ${file}: ${message}`);
       }
     }
   }

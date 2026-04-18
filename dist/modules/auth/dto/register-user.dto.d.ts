@@ -1,4 +1,4 @@
-import { Role } from '../../common/constants/roles.constant';
+import { Role } from '@prisma/client';
 export declare class RegisterUserDto {
     email: string;
     password: string;

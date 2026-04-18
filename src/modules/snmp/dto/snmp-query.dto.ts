@@ -14,4 +14,3 @@ export class SnmpQueryDto {
   @IsString()
   version?: string;
 }
-}

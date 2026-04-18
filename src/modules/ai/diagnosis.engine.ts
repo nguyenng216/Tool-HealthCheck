@@ -51,7 +51,7 @@ export class DiagnosisEngine {
       recommendation:
         'Review VLAN membership, trunk configuration, and ACLs to restore proper isolation and path segmentation.',
       score: 90,
-      matches: (signals) => signals.vlanIsolation,
+      matches: (signals) => signals.vlanIsolation === true,
     },
     {
       issue: 'DNS slow response impacting service resolution',
@@ -162,7 +162,6 @@ export class DiagnosisEngine {
     const cpuLoad = this.toNumber(cpu?.metrics?.cpuLoad);
     const memoryUsed = this.toNumber(memory?.metrics?.memoryUsedPercent ?? memory?.metrics?.memoryUsed);
     const trafficUtilization = this.toNumber(iface?.metrics?.trafficUtilization ?? iface?.metrics?.trafficPercent ?? iface?.metrics?.trafficLoad);
-    const errorRate = this.toNumber(iface?.metrics?.errorRate);
     const crcErrors = this.toNumber(iface?.metrics?.crcErrors ?? iface?.metrics?.crcCount);
     const interfaceSpeed = this.toNumber(iface?.metrics?.interfaceSpeed);
     const expectedSpeed = this.toNumber(iface?.metrics?.expectedSpeed);
@@ -196,7 +195,7 @@ export class DiagnosisEngine {
       return value;
     }
     if (typeof value === 'string' && value.trim().length > 0) {
-      const normalized = Number(value.replace(/[^0-9.\-]/g, ''));
+      const normalized = Number(value.replace(/[^0-9.-]/g, ''));
       return Number.isFinite(normalized) ? normalized : null;
     }
     return null;

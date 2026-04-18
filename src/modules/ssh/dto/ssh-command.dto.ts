@@ -26,12 +26,3 @@ export class SshCommandDto {
   @IsString()
   adapter?: string;
 }
-
-  @IsOptional()
-  @IsString()
-  adapter?: string;
-
-  @IsOptional()
-  @IsString()
-  commandKey?: string;
-}

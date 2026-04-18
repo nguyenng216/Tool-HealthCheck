@@ -36,5 +36,4 @@ __decorate([
     (0, class_validator_1.IsEnum)(ExecutionMode),
     __metadata("design:type", String)
 ], RunHealthcheckDto.prototype, "mode", void 0);
-mode ?  : ExecutionMode;
 //# sourceMappingURL=run-healthcheck.dto.js.map

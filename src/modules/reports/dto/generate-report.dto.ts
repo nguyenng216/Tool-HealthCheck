@@ -14,4 +14,3 @@ export class GenerateReportDto {
   @IsObject()
   metadata?: Record<string, unknown>;
 }
-}

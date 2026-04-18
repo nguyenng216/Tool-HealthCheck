@@ -15,7 +15,6 @@ type HealthcheckResult = {
   healthcheck: {
     status: string;
     details: {
-      dataSource?: 'demo' | 'live';
       mode?: string;
       policy?: string;
       [key: string]: unknown;
@@ -37,7 +36,8 @@ type ConnectivityResult = {
 
 type LiveConfig = {
   deviceId: number;
-  cliProtocol: 'ssh' | 'telnet' | 'serial';
+  cliProtocol: 'ssh' | 'telnet' | 'serial' | 'snmp';
+  ip?: string;
   sshUsername: string;
   sshPassword: string;
   sshPort: number;
@@ -57,10 +57,15 @@ export default function HealthcheckPage() {
   const [testingConnectivity, setTestingConnectivity] = useState(false);
   const [savingCredential, setSavingCredential] = useState(false);
   const [error, setError] = useState('');
+  const [sshInfoMessage, setSshInfoMessage] = useState('');
+  const [activeProtocolTab, setActiveProtocolTab] = useState<'ssh' | 'telnet' | 'serial' | 'snmp'>('ssh');
+  const [autoRunHealthcheck, setAutoRunHealthcheck] = useState(true);
+  const [sshPortOpen, setSshPortOpen] = useState(false);
   const [config, setConfig] = useState<LiveConfig>({
     deviceId: 1,
     cliProtocol: 'ssh',
-    sshUsername: 'admin',
+    ip: '',
+    sshUsername: '',
     sshPassword: '',
     sshPort: 22,
     sshAdapter: 'cisco',
@@ -76,8 +81,6 @@ export default function HealthcheckPage() {
     if (!result) return { label: 'Not run', status: 'PENDING' as const };
     return { label: result.healthcheck.status, status: result.healthcheck.status as 'OK' | 'WARNING' | 'CRITICAL' | 'PENDING' };
   }, [result]);
-
-  const dataSource = result?.healthcheck.details?.dataSource ?? 'demo';
 
   async function handleRunHealthcheck() {
     setLoading(true);
@@ -113,10 +116,32 @@ export default function HealthcheckPage() {
     }
   }
 
+  async function handleRunLiveHealthcheck() {
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/healthchecks/live-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+      if (!response.ok) {
+        throw new Error(`Live healthcheck failed: ${response.statusText}`);
+      }
+      setResult(await response.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown live healthcheck error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleTestConnectivity() {
     setTestingConnectivity(true);
     setError('');
     setConnectivity(null);
+    setSshInfoMessage('');
 
     try {
       const response = await fetch('/api/healthchecks/connectivity-test', {
@@ -124,12 +149,39 @@ export default function HealthcheckPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       });
+
       if (!response.ok) {
-        throw new Error(`Connectivity test failed: ${response.statusText}`);
+        const body = await response.text();
+        const message = body || response.statusText || 'Connectivity test failed';
+        if (activeProtocolTab === 'ssh') {
+          setSshInfoMessage(message);
+          setSshPortOpen(false);
+          return;
+        }
+        throw new Error(`Connectivity test failed: ${message}`);
       }
-      setConnectivity((await response.json()) as ConnectivityResult);
+
+      const result = (await response.json()) as ConnectivityResult;
+      setConnectivity(result);
+
+      if (activeProtocolTab === 'ssh') {
+        setSshPortOpen(!!result.ssh.ok);
+        setSshInfoMessage(result.ssh.message);
+      } else {
+        setSshPortOpen(false);
+      }
+
+      if (autoRunHealthcheck && (config.cliProtocol === 'telnet' || config.cliProtocol === 'serial')) {
+        await handleRunLiveHealthcheck();
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown connectivity test error');
+      const message = err instanceof Error ? err.message : 'Unknown connectivity test error';
+      if (activeProtocolTab === 'ssh') {
+        setSshInfoMessage(message);
+        setSshPortOpen(false);
+      } else {
+        setError(message);
+      }
     } finally {
       setTestingConnectivity(false);
     }
@@ -157,6 +209,10 @@ export default function HealthcheckPage() {
 
   function updateConfig<K extends keyof LiveConfig>(key: K, value: LiveConfig[K]) {
     setConfig((previous) => ({ ...previous, [key]: value }));
+    if (key === 'ip' || key === 'sshPort' || key === 'cliProtocol') {
+      setSshPortOpen(false);
+      setConnectivity(null);
+    }
   }
 
   return (
@@ -187,118 +243,207 @@ export default function HealthcheckPage() {
         <AlertPanel title="Healthcheck error" description={error} type="critical" />
       ) : null}
 
-      {!error && dataSource === 'demo' ? (
-        <AlertPanel
-          title="Demo data mode"
-          description="Current healthcheck metrics are simulated. Switch backend HEALTHCHECK_MODE=live and connect to network devices to collect real telemetry."
-          type="warning"
-        />
-      ) : null}
-
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-panel">
         <h3 className="text-lg font-semibold text-slate-900">Live connectivity setup</h3>
         <p className="mt-2 text-sm text-slate-600">
-          Configure SSH/SNMP credential for selected device, test connectivity, then save encrypted credential.
+          Configure SSH, Telnet, Serial or SNMP credentials for the selected device. For SSH, enter IP first to test port connectivity, then enter credentials.
         </p>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <label className="text-sm text-slate-700">
-            Device ID
-            <input
-              type="number"
-              min={1}
-              value={config.deviceId}
-              onChange={(event) => updateConfig('deviceId', Number(event.target.value))}
-              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
-            />
-          </label>
-          <label className="text-sm text-slate-700">
-            SSH Username
-            <input
-              type="text"
-              value={config.sshUsername}
-              onChange={(event) => updateConfig('sshUsername', event.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
-            />
-          </label>
-          <label className="text-sm text-slate-700">
-            CLI Protocol
-            <select
-              value={config.cliProtocol}
-              onChange={(event) => updateConfig('cliProtocol', event.target.value as LiveConfig['cliProtocol'])}
-              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
-            >
-              <option value="ssh">SSH</option>
-              <option value="telnet">Telnet</option>
-              <option value="serial">Serial (PuTTY/plink)</option>
-            </select>
-          </label>
-          <label className="text-sm text-slate-700">
-            SSH Password
-            <input
-              type="password"
-              value={config.sshPassword}
-              onChange={(event) => updateConfig('sshPassword', event.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
-            />
-          </label>
-          <label className="text-sm text-slate-700">
-            SSH Port
-            <input
-              type="number"
-              min={1}
-              value={config.sshPort}
-              onChange={(event) => updateConfig('sshPort', Number(event.target.value))}
-              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
-            />
-          </label>
-          <label className="text-sm text-slate-700">
-            Telnet Port
-            <input
-              type="number"
-              min={1}
-              value={config.telnetPort}
-              onChange={(event) => updateConfig('telnetPort', Number(event.target.value))}
-              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
-            />
-          </label>
-          <label className="text-sm text-slate-700">
-            Serial Port
-            <input
-              type="text"
-              value={config.serialPort}
-              onChange={(event) => updateConfig('serialPort', event.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
-            />
-          </label>
-          <label className="text-sm text-slate-700">
-            Serial BaudRate
-            <input
-              type="number"
-              min={1200}
-              value={config.serialBaudRate}
-              onChange={(event) => updateConfig('serialBaudRate', Number(event.target.value))}
-              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
-            />
-          </label>
-          <label className="text-sm text-slate-700">
-            SNMP Community
-            <input
-              type="text"
-              value={config.snmpCommunity}
-              onChange={(event) => updateConfig('snmpCommunity', event.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
-            />
-          </label>
-          <label className="text-sm text-slate-700">
-            SNMP Interface Index
-            <input
-              type="number"
-              min={1}
-              value={config.snmpInterfaceIndex}
-              onChange={(event) => updateConfig('snmpInterfaceIndex', Number(event.target.value))}
-              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
-            />
-          </label>
+        <div className="mt-5">
+          <div className="flex flex-wrap items-center gap-2 rounded-3xl border border-slate-200 bg-slate-50 p-3">
+            {['ssh', 'telnet', 'serial', 'snmp'].map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => {
+                  setActiveProtocolTab(tab as 'ssh' | 'telnet' | 'serial' | 'snmp');
+                  updateConfig('cliProtocol', tab as LiveConfig['cliProtocol']);
+                  setSshPortOpen(false);
+                }}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  activeProtocolTab === tab ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 shadow-sm'
+                }`}
+              >
+                {tab.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+
+          <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-inner">
+            {activeProtocolTab === 'ssh' ? (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="text-sm text-slate-700">
+                    SSH IP
+                    <input
+                      type="text"
+                      value={config.ip}
+                      onChange={(event) => updateConfig('ip', event.target.value)}
+                      placeholder="e.g. 192.168.1.1"
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                    />
+                  </label>
+                  <label className="text-sm text-slate-700">
+                    SSH Port
+                    <input
+                      type="number"
+                      min={1}
+                      value={config.sshPort}
+                      onChange={(event) => updateConfig('sshPort', Number(event.target.value))}
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                    />
+                  </label>
+                </div>
+
+                {sshPortOpen ? (
+                  <>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="text-sm text-slate-700">
+                        SSH Username
+                        <input
+                          type="text"
+                          value={config.sshUsername}
+                          onChange={(event) => updateConfig('sshUsername', event.target.value)}
+                          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                        />
+                      </label>
+                      <label className="text-sm text-slate-700">
+                        SSH Password
+                        <input
+                          type="password"
+                          value={config.sshPassword}
+                          onChange={(event) => updateConfig('sshPassword', event.target.value)}
+                          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                        />
+                      </label>
+                    </div>
+                    {sshInfoMessage ? (
+                      <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                        {sshInfoMessage}
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                      Enter SSH IP and Port, then press <strong>Test Connectivity</strong>.
+                      If the SSH port is reachable, username and password inputs will appear.
+                    </div>
+                    {sshInfoMessage ? (
+                      <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                        {sshInfoMessage}
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            {activeProtocolTab === 'telnet' ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="text-sm text-slate-700">
+                  Telnet Port
+                  <input
+                    type="number"
+                    min={1}
+                    value={config.telnetPort}
+                    onChange={(event) => updateConfig('telnetPort', Number(event.target.value))}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  Username
+                  <input
+                    type="text"
+                    value={config.sshUsername}
+                    onChange={(event) => updateConfig('sshUsername', event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  Password
+                  <input
+                    type="password"
+                    value={config.sshPassword}
+                    onChange={(event) => updateConfig('sshPassword', event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                  />
+                </label>
+              </div>
+            ) : null}
+
+            {activeProtocolTab === 'serial' ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="text-sm text-slate-700">
+                  Serial Port
+                  <input
+                    type="text"
+                    value={config.serialPort}
+                    onChange={(event) => updateConfig('serialPort', event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  Baud Rate
+                  <input
+                    type="number"
+                    min={1200}
+                    value={config.serialBaudRate}
+                    onChange={(event) => updateConfig('serialBaudRate', Number(event.target.value))}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                  />
+                </label>
+              </div>
+            ) : null}
+
+            {activeProtocolTab === 'snmp' ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="text-sm text-slate-700">
+                  SNMP Community
+                  <input
+                    type="text"
+                    value={config.snmpCommunity}
+                    onChange={(event) => updateConfig('snmpCommunity', event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  SNMP Interface Index
+                  <input
+                    type="number"
+                    min={1}
+                    value={config.snmpInterfaceIndex}
+                    onChange={(event) => updateConfig('snmpInterfaceIndex', Number(event.target.value))}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  SNMP Version
+                  <input
+                    type="text"
+                    value={config.snmpVersion}
+                    onChange={(event) => updateConfig('snmpVersion', event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                  />
+                </label>
+              </div>
+            ) : null}
+          </div>
+
+          {(config.cliProtocol === 'ssh' || config.cliProtocol === 'telnet') && (
+            <div className="mt-4 flex items-center gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <input
+                id="autoRunHealthcheck"
+                type="checkbox"
+                checked={autoRunHealthcheck}
+                onChange={(event) => setAutoRunHealthcheck(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-slate-900"
+              />
+              <label htmlFor="autoRunHealthcheck" className="text-sm text-slate-700">
+                Automatically run healthcheck after successful {config.cliProtocol.toUpperCase()} connectivity
+              </label>
+            </div>
+          )}
         </div>
 
         <div className="mt-4 flex flex-wrap gap-3">
@@ -307,7 +452,13 @@ export default function HealthcheckPage() {
             disabled={testingConnectivity}
             className="rounded-2xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {testingConnectivity ? 'Testing...' : 'Test Connectivity'}
+            {testingConnectivity
+              ? 'Testing...'
+              : activeProtocolTab === 'ssh' && !config.sshUsername && !config.sshPassword
+              ? 'Check SSH IP'
+              : activeProtocolTab === 'ssh'
+              ? 'Connect SSH'
+              : 'Test Connectivity'}
           </button>
           <button
             onClick={handleSaveCredential}
@@ -317,21 +468,6 @@ export default function HealthcheckPage() {
             {savingCredential ? 'Saving...' : 'Save Credential'}
           </button>
         </div>
-
-        {connectivity ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <AlertPanel
-              title={connectivity.ssh.ok ? 'SSH OK' : 'SSH Failed'}
-              description={connectivity.ssh.message}
-              type={connectivity.ssh.ok ? 'info' : 'critical'}
-            />
-            <AlertPanel
-              title={connectivity.snmp.ok ? 'SNMP OK' : 'SNMP Failed'}
-              description={connectivity.snmp.message}
-              type={connectivity.snmp.ok ? 'info' : 'critical'}
-            />
-          </div>
-        ) : null}
       </div>
 
       {result ? (
@@ -359,7 +495,6 @@ export default function HealthcheckPage() {
             <h3 className="text-lg font-semibold text-slate-900">Healthcheck details</h3>
             <p className="mt-4 text-sm text-slate-600">Status: {result.healthcheck.status}</p>
             <p className="mt-3 text-sm text-slate-600">Policy: {String(result.healthcheck.details?.policy ?? 'standard')}</p>
-            <p className="mt-3 text-sm text-slate-600">Data source: {String(result.healthcheck.details?.dataSource ?? 'demo')}</p>
           </div>
         </div>
       ) : null}
